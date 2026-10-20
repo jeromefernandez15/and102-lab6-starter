@@ -1,81 +1,104 @@
+
 package com.codepath.lab6
 
 import android.os.Bundle
-import android.util.Log
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.DividerItemDecoration
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.codepath.lab6.databinding.ActivityMainBinding
-import com.codepath.asynchttpclient.AsyncHttpClient
-import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.fragment.app.Fragment
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import kotlinx.serialization.json.Json
-import okhttp3.Headers
-import org.json.JSONException
+import android.content.res.Configuration
 
-// Helper function for JSON parsing
+
 fun createJson() = Json {
     isLenient = true
     ignoreUnknownKeys = true
     useAlternativeNames = false
 }
 
-private const val TAG = "MainActivity/"
-private val API_KEY = BuildConfig.API_KEY
-private val PARKS_URL = "https://developer.nps.gov/api/v1/parks?api_key=${API_KEY}"
-
 class MainActivity : AppCompatActivity() {
 
-    private val parks = mutableListOf<Park>()
-    private lateinit var parksRecyclerView: RecyclerView
-    private lateinit var binding: ActivityMainBinding
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
 
-        // Set up ViewBinding
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        val view = binding.root
-        setContentView(view)
+        val prefs = getSharedPreferences("campground_settings", MODE_PRIVATE)
 
-        // Find RecyclerView and set up adapter
-        parksRecyclerView = findViewById(R.id.parks)
-        val parksAdapter = ParksAdapter(this, parks)
-        parksRecyclerView.adapter = parksAdapter
+        // Restore dark mode preference.
+        val darkMode = prefs.getBoolean("dark_mode", false)
 
-        // Use LinearLayoutManager with a divider
-        parksRecyclerView.layoutManager = LinearLayoutManager(this).also {
-            val dividerItemDecoration = DividerItemDecoration(this, it.orientation)
-            parksRecyclerView.addItemDecoration(dividerItemDecoration)
+        val desiredMode = if (darkMode) {
+            AppCompatDelegate.MODE_NIGHT_YES
+        } else {
+            AppCompatDelegate.MODE_NIGHT_NO
         }
 
-        // Fetch data from NPS Parks API
-        val client = AsyncHttpClient()
-        client.get(PARKS_URL, object : JsonHttpResponseHandler() {
-            override fun onFailure(
-                statusCode: Int,
-                headers: Headers?,
-                response: String?,
-                throwable: Throwable?
-            ) {
-                Log.e(TAG, "Failed to fetch parks: $statusCode")
-            }
+        if (AppCompatDelegate.getDefaultNightMode() != desiredMode) {
+            AppCompatDelegate.setDefaultNightMode(desiredMode)
+        }
 
-            override fun onSuccess(statusCode: Int, headers: Headers, json: JSON) {
-                Log.i(TAG, "Successfully fetched parks: $json")
-                try {
-                    val parsedJson = createJson().decodeFromString(
-                        ParksResponse.serializer(),
-                        json.jsonObject.toString()
-                    )
-                    parsedJson.data?.let { list ->
-                        parks.addAll(list)
-                        parksAdapter.notifyDataSetChanged()
-                    }
-                } catch (e: JSONException) {
-                    Log.e(TAG, "Exception: $e")
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Restore keep-screen-awake preference.
+        if (prefs.getBoolean("keep_awake", false)) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+
+        val bottomNavigation =
+            findViewById<BottomNavigationView>(
+                R.id.bottom_navigation
+            )
+
+        bottomNavigation.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.navigation_home -> {
+                    replaceFragment(HomeFragment())
+                    true
                 }
+
+                R.id.navigation_parks -> {
+                    replaceFragment(ParksFragment())
+                    true
+                }
+
+                R.id.navigation_campgrounds -> {
+                    replaceFragment(CampgroundFragment())
+                    true
+                }
+
+                R.id.navigation_settings -> {
+                    replaceFragment(SettingsFragment())
+                    true
+                }
+
+                else -> false
             }
-        })
+        }
+
+
+        if (savedInstanceState == null) {
+            bottomNavigation.selectedItemId =
+                R.id.navigation_home
+        }
+
+    }
+
+
+    override fun onConfigurationChanged(
+        newConfig: Configuration
+    ) {
+        super.onConfigurationChanged(newConfig)
+
+        // Keep the current fragment and its data
+        // instead of recreating the Activity.
+    }
+
+
+    private fun replaceFragment(fragment: Fragment) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.main_frame_layout, fragment)
+            .commit()
     }
 }
